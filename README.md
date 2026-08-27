@@ -83,4 +83,4 @@ Issues and pull requests are welcome. If you spot additional bugs or have use ca
 
 ## License
 
-No license has been specified for this repository yet — until one is added, all rights are reserved by the author. If you intend to reuse or modify this blueprint, please check with the repository owner or watch for a `LICENSE` file to be added.
+[MIT](LICENSE) — do whatever you like with it, just keep the copyright notice.
