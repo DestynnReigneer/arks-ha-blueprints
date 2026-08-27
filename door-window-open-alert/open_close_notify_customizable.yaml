@@ -4,7 +4,7 @@ blueprint:
     Sends a configurable notification if a door or window is left open for a
     specific duration. Features customizable text, button titles, and time delays.
   domain: automation
-  source_url: https://raw.githubusercontent.com/DestynnReigneer/HA-Open-Close-Notify-Blueprint/main/open_close_notify_customizable.yaml
+  source_url: https://raw.githubusercontent.com/DestynnReigneer/ha-blueprints/main/door-window-open-alert/open_close_notify_customizable.yaml
 
   input:
     sensor_to_monitor:
