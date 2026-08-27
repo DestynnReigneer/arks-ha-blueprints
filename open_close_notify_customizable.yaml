@@ -4,7 +4,7 @@ blueprint:
     Sends a configurable notification if a door or window is left open for a
     specific duration. Features customizable text, button titles, and time delays.
   domain: automation
-  source_url: https://gist.githubusercontent.com/DestynnReigneer/81fd6c3ca1993f5068678c56fc5c0671/raw/55eeeb13e74f02ebe1d6641ecce9c543f4467b6e/open_alert_customizable.yaml
+  source_url: https://raw.githubusercontent.com/DestynnReigneer/HA-Open-Close-Notify-Blueprint/main/open_close_notify_customizable.yaml
 
   input:
     sensor_to_monitor:
@@ -24,7 +24,7 @@ blueprint:
           max: 120
           unit_of_measurement: "minutes"
           mode: box
-          
+
     notification_devices:
       name: Notification Devices
       description: The devices that will receive the alert notification.
@@ -32,7 +32,7 @@ blueprint:
         device:
           domain: mobile_app
           multiple: true
-          
+
     closable_device:
       name: Closable Device (Optional)
       description: >-
@@ -57,7 +57,7 @@ blueprint:
       selector:
         text:
           multiline: false
-          
+
     option_1_delay_minutes:
       name: Option 1 Delay (minutes)
       description: The number of minutes to wait before re-sending the alert.
@@ -88,7 +88,7 @@ blueprint:
       selector:
         text:
           multiline: false
-          
+
     option_3_delay_minutes:
       name: Option 3 Delay (minutes)
       description: The number of minutes to wait before re-sending the alert.
@@ -108,7 +108,7 @@ blueprint:
       selector:
         text:
           multiline: true
-          
+
     acknowledgment_check_delay_minutes:
       name: Acknowledgment Check Delay (minutes)
       description: The time to wait after acknowledgment before re-checking the sensor.
@@ -118,7 +118,7 @@ blueprint:
           max: 120
           unit_of_measurement: "minutes"
           mode: box
-          
+
     urgent_prefix_text:
       name: Urgent Prefix Text
       description: The prefix for the re-sent notification after an urgent check fails.
@@ -133,7 +133,7 @@ blueprint:
       selector:
         text:
           multiline: true
-          
+
     failure_message_text:
       name: Closing Failure Message
       description: >-
@@ -142,8 +142,8 @@ blueprint:
       selector:
         text:
           multiline: true
-          
-mode: queued
+
+mode: restart
 
 trigger:
   - platform: state
@@ -153,178 +153,152 @@ trigger:
       minutes: !input initial_trigger_time_minutes
 
 variables:
-  notification_id: alert_{{ trigger.entity_id.split('.')[1] }}_{{ now().timestamp() | int }}
+  notification_id: "alert_{{ trigger.entity_id.split('.')[1] }}_{{ now().timestamp() | int }}"
+  has_closable_device: "{{ input('closable_device') not in [none, ''] }}"
+  option_2_title: >-
+    {{ input('option_2_title_closable') if has_closable_device else input('option_2_title_non_closable') }}
+  alert_title: "Alert"
+  # No response has been picked yet, so the first send should sit and wait for
+  # a reply rather than nag again right away. 1440 minutes (24h) stands in for
+  # "no timeout yet" - if truly nobody responds in a day, the alert resends as
+  # a safety net.
+  resend_delay_minutes: 1440
 
 action:
-  # The main action block to send the initial notification.
-  - service: notify.mobile_app
-    data:
-      title: "Alert"
-      message: !input initial_notification_message
-      data:
-        actions:
-          - action: "wait_1"
-            title: !input option_1_title
-          - action: "close"
-            title: >-
-              {% if is_device_id(input('closable_device')) %}
-                {{ input('option_2_title_closable') }}
-              {% else %}
-                {{ input('option_2_title_non_closable') }}
-              {% endif %}
-          - action: "wait_2"
-            title: !input option_3_title
-        tag: !input notification_id
-
-  # Wait for a user response
-  - wait_for_trigger:
-      - platform: event
-        event_type: mobile_app_notification_action
-        event_data:
-          action: "wait_1"
-          tag: !input notification_id
-      - platform: event
-        event_type: mobile_app_notification_action
-        event_data:
-          action: "close"
-          tag: !input notification_id
-      - platform: event
-        event_type: mobile_app_notification_action
-        event_data:
-          action: "wait_2"
-          tag: !input notification_id
-
-  - choose:
-      # --- Option 1: Wait 1
-      - conditions: "{{ wait.trigger.event.data.action == 'wait_1' }}"
-        sequence:
-          - service: mobile_app
-            data:
-              action: "dismiss_notification"
-              data:
-                tag: !input notification_id
-          - delay:
-              minutes: !input option_1_delay_minutes
-          - repeat:
-              until: "{{ states(input('sensor_to_monitor')) == 'off' }}"
-              sequence:
-                - service: notify.mobile_app
+  - repeat:
+      while: "{{ states(input('sensor_to_monitor')) == 'on' }}"
+      sequence:
+        # Send (or re-send) the actionable alert to every selected device.
+        - repeat:
+            for_each: !input notification_devices
+            sequence:
+              - action: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
+                data:
+                  title: "{{ alert_title }}"
+                  message: !input initial_notification_message
                   data:
-                    title: "Alert"
-                    message: !input initial_notification_message
-                    data:
-                      actions:
-                        - action: "wait_1"
-                          title: !input option_1_title
-                        - action: "close"
-                          title: >-
-                            {% if is_device_id(input('closable_device')) %}
-                              {{ input('option_2_title_closable') }}
-                            {% else %}
-                              {{ input('option_2_title_non_closable') }}
-                            {% endif %}
-                        - action: "wait_2"
-                          title: !input option_3_title
-                      tag: !input notification_id
+                    actions:
+                      - action: "wait_1"
+                        title: !input option_1_title
+                      - action: "close"
+                        title: "{{ option_2_title }}"
+                      - action: "wait_2"
+                        title: !input option_3_title
+                    tag: "{{ notification_id }}"
+
+        # Listen for a button press. If nothing arrives within the current
+        # delay, continue_on_timeout lets the loop fall through and resend.
+        - wait_for_trigger:
+            - platform: event
+              event_type: mobile_app_notification_action
+              event_data:
+                action: "wait_1"
+                tag: "{{ notification_id }}"
+            - platform: event
+              event_type: mobile_app_notification_action
+              event_data:
+                action: "close"
+                tag: "{{ notification_id }}"
+            - platform: event
+              event_type: mobile_app_notification_action
+              event_data:
+                action: "wait_2"
+                tag: "{{ notification_id }}"
+          timeout:
+            minutes: "{{ resend_delay_minutes }}"
+          continue_on_timeout: true
+
+        - choose:
+            # --- Option 1: Wait
+            - conditions: "{{ wait.trigger is not none and wait.trigger.event.data.action == 'wait_1' }}"
+              sequence:
+                - repeat:
+                    for_each: !input notification_devices
+                    sequence:
+                      - action: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
+                        data:
+                          message: "clear_notification"
+                          data:
+                            tag: "{{ notification_id }}"
                 - delay:
                     minutes: !input option_1_delay_minutes
+                - variables:
+                    resend_delay_minutes: !input option_1_delay_minutes
 
-      # --- Option 2: Close
-      - conditions: "{{ wait.trigger.event.data.action == 'close' }}"
-        sequence:
-          - variables:
-              device_name: >-
-                {{ device_attr(wait.trigger.event.data.device_id, 'name') }}
-          - choose:
-              # Scenario 2a: No Closable Device configured
-              - conditions: "{{ not is_device_id(input('closable_device')) }}"
-                sequence:
-                  - service: notify.mobile_app
-                    data:
-                      message: "{{ input('acknowledgment_message_text') | replace('{person}', device_name) }}"
-                      data:
-                        tag: !input notification_id
-                  - delay:
-                      minutes: !input acknowledgment_check_delay_minutes
-                  - repeat:
-                      until: "{{ states(input('sensor_to_monitor')) == 'off' }}"
-                      sequence:
-                        - service: notify.mobile_app
-                          data:
-                            title: !input urgent_prefix_text
-                            message: !input initial_notification_message
-                            data:
-                              actions:
-                                - action: "wait_1"
-                                  title: !input option_1_title
-                                - action: "close"
-                                  title: >-
-                                    {% if is_device_id(input('closable_device')) %}
-                                      {{ input('option_2_title_closable') }}
-                                    {% else %}
-                                      {{ input('option_2_title_non_closable') }}
-                                    {% endif %}
-                                - action: "wait_2"
-                                  title: !input option_3_title
-                              tag: !input notification_id
-                        - delay:
-                            minutes: 5 # A short delay to avoid spamming.
-
-              # Scenario 2b: Closable Device IS configured
-              - conditions: "{{ is_device_id(input('closable_device')) }}"
-                sequence:
-                  - service: cover.close_cover
-                    entity_id: !input closable_device
-                  - service: notify.mobile_app
-                    data:
-                      title: "Alert"
-                      message: !input confirmation_message_text
-                      data:
-                        tag: !input notification_id
-                  - delay:
-                      minutes: 1
-                  - repeat:
-                      until: "{{ states(input('sensor_to_monitor')) == 'off' }}"
-                      sequence:
-                        - service: notify.mobile_app
-                          data:
-                            title: "Alert"
-                            message: !input failure_message_text
-                            data:
-                              tag: !input notification_id
-                        - delay:
-                            minutes: 5
-
-      # --- Option 3: Wait 2
-      - conditions: "{{ wait.trigger.event.data.action == 'wait_2' }}"
-        sequence:
-          - service: mobile_app
-            data:
-              action: "dismiss_notification"
-              data:
-                tag: !input notification_id
-          - delay:
-              minutes: !input option_3_delay_minutes
-          - repeat:
-              until: "{{ states(input('sensor_to_monitor')) == 'off' }}"
+            # --- Option 3: Wait
+            - conditions: "{{ wait.trigger is not none and wait.trigger.event.data.action == 'wait_2' }}"
               sequence:
-                - service: notify.mobile_app
-                  data:
-                    title: "Alert"
-                    message: !input initial_notification_message
-                    data:
-                      actions:
-                        - action: "wait_1"
-                          title: !input option_1_title
-                        - action: "close"
-                          title: >-
-                            {% if is_device_id(input('closable_device')) %}
-                              {{ input('option_2_title_closable') }}
-                            {% else %}
-                              {{ input('option_2_title_non_closable') }}
-                            {% endif %}
-                        - action: "wait_2"
-                          title: !input option_3_title
-                      tag: !input notification_id
+                - repeat:
+                    for_each: !input notification_devices
+                    sequence:
+                      - action: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
+                        data:
+                          message: "clear_notification"
+                          data:
+                            tag: "{{ notification_id }}"
                 - delay:
                     minutes: !input option_3_delay_minutes
+                - variables:
+                    resend_delay_minutes: !input option_3_delay_minutes
+
+            # --- Option 2: Close
+            - conditions: "{{ wait.trigger is not none and wait.trigger.event.data.action == 'close' }}"
+              sequence:
+                - variables:
+                    device_name: >-
+                      {{ device_attr(wait.trigger.event.data.device_id, 'name') or 'Someone' }}
+                - choose:
+                    # Scenario 2a: No Closable Device configured - acknowledge,
+                    # then keep nagging (with the same buttons live) until the
+                    # sensor closes.
+                    - conditions: "{{ not has_closable_device }}"
+                      sequence:
+                        - repeat:
+                            for_each: !input notification_devices
+                            sequence:
+                              - action: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
+                                data:
+                                  message: >-
+                                    {{ input('acknowledgment_message_text') | replace('{person}', device_name) }}
+                                  data:
+                                    tag: "{{ notification_id }}"
+                        - variables:
+                            alert_title: !input urgent_prefix_text
+                            resend_delay_minutes: !input acknowledgment_check_delay_minutes
+
+                    # Scenario 2b: Closable Device IS configured
+                    - conditions: "{{ has_closable_device }}"
+                      sequence:
+                        - action: cover.close_cover
+                          target:
+                            entity_id: !input closable_device
+                        - repeat:
+                            for_each: !input notification_devices
+                            sequence:
+                              - action: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
+                                data:
+                                  title: "Alert"
+                                  message: !input confirmation_message_text
+                                  data:
+                                    tag: "{{ notification_id }}"
+                        - delay:
+                            minutes: 1
+                        - repeat:
+                            until: "{{ states(input('sensor_to_monitor')) == 'off' }}"
+                            sequence:
+                              - repeat:
+                                  for_each: !input notification_devices
+                                  sequence:
+                                    - action: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
+                                      data:
+                                        title: "Alert"
+                                        message: !input failure_message_text
+                                        data:
+                                          tag: "{{ notification_id }}"
+                              - delay:
+                                  minutes: 5
+
+            # --- Timeout: nobody responded. Fall through and let the outer
+            # repeat resend at the same cadence.
+            - conditions: "{{ wait.trigger is none }}"
+              sequence: []

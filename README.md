@@ -23,9 +23,12 @@ It's a one-stop notification system: it presents the user with choices, nudges t
 1. The automation triggers once the monitored sensor has been `on` (open) for the configured **Initial Alert Time**.
 2. An actionable notification goes out with three buttons: two "wait" options with independent delays, and a "close" option.
 3. Depending on which button is pressed (or if nobody responds):
-   - **Wait** — the alert is dismissed and re-sent after the chosen delay, repeating until the sensor closes.
-   - **Close**, with no closable device configured — sends an acknowledgment (naming who tapped it), then keeps nagging until the sensor closes.
-   - **Close**, with a closable device configured — calls `cover.close_cover`, sends a confirmation, and keeps nagging if the sensor is still open afterward.
+   - **No response** — the same alert is re-sent after 24 hours as a safety net, still with live buttons.
+   - **Wait** — the alert is dismissed and re-sent (with working buttons again) after the chosen delay, repeating until the sensor closes.
+   - **Close**, with no closable device configured — sends an acknowledgment naming who tapped it, then keeps nagging — buttons included — until the sensor closes.
+   - **Close**, with a closable device configured — calls `cover.close_cover`, sends a confirmation, and keeps nagging (no buttons this time, since there's nothing left to choose) if the sensor is still open afterward.
+
+If the sensor flaps (closes and reopens) mid-alert, the automation restarts cleanly for the new open event instead of running two nag loops at once.
 
 ## Requirements
 
@@ -68,14 +71,7 @@ It's a one-stop notification system: it presents the user with choices, nudges t
 
 ## Known Issues
 
-This blueprint has a few outstanding bugs that are being tracked before it can be considered fully working out of the box:
-
-- **Notifications aren't actually targeted.** The `notification_devices` input is collected but never used — every notification call is `notify.mobile_app`, which is not a real Home Assistant service. Delivery needs to loop over the selected devices (e.g. `notify.mobile_app_<device_slug>` per device) instead.
-- **`notification_id` is used with `!input` but is a template variable, not a blueprint input.** `!input` only resolves declared `blueprint.input` entries; referencing `!input notification_id` for a value defined under `variables:` is invalid and will fail blueprint validation. It should be referenced as `{{ notification_id }}`.
-- **The closable-device check is wrong.** `is_device_id(input('closable_device'))` tests whether the value looks like a device registry ID, but the `closable_device` selector returns an *entity* ID (e.g. `cover.garage_door`), so this condition is effectively always false — the auto-close path never triggers even when a cover is configured.
-- **The dismiss-notification call is malformed.** `service: mobile_app` with `data: {action: dismiss_notification}` isn't a valid way to clear a Companion App notification; that's normally done via `notify.mobile_app_<device>` with `message: "clear_notification"` and the matching `tag`.
-- **Button presses after the first are ignored.** Once a "wait" option is chosen, the repeat loop just delays and re-sends the same notification — it never listens for `mobile_app_notification_action` again, so pressing a button on a later reminder does nothing.
-- **`source_url` points at the original gist**, not this repository, so Home Assistant's "check for blueprint updates" feature won't see changes made here until it's updated to point at this repo's raw file.
+- **Who tapped "Close" may be reported wrong on some devices.** The blueprint reads `device_id` off the `mobile_app_notification_action` event to look up a name for the acknowledgment message. Home Assistant has a [known bug](https://github.com/home-assistant/core/issues/88742) where this field is sometimes the phone's own OS-level ID rather than its Home Assistant device registry ID, which can make `{person}` resolve to nothing on affected devices. This is a core Home Assistant issue, not something this blueprint can work around.
 
 ## Contributing
 
