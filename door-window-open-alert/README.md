@@ -41,7 +41,7 @@ If the sensor flaps (closes and reopens) mid-alert, the automation restarts clea
 
 1. Click the **"Open your Home Assistant instance"** badge above, or go to **Settings → Automations & Scenes → Blueprints → Import Blueprint** and paste in:
    ```
-   https://raw.githubusercontent.com/DestynnReigneer/ha-blueprints/main/door-window-open-alert/open_close_notify_customizable.yaml
+   https://raw.githubusercontent.com/DestynnReigneer/arks-ha-blueprints/main/door-window-open-alert/open_close_notify_customizable.yaml
    ```
 2. Click **Preview Blueprint**, then **Import Blueprint**.
 3. Go to the **Automations** tab and click **Create Automation**, then choose **Customizable Door/Window Open Alert**.
