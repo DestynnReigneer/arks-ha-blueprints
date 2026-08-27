@@ -1,5 +1,19 @@
-# Home-Assistant-Blueprints
-The purpose of this Blueprint is to establish mission critical notifications to all needed devices for resolution in protecting infrastructure and assets.
-Examples are, doors, windows, garages, safes, pool gates, etc… If it can be left open for periods of time and can be a cause for concern and need immediate resolution.
+# HA Blueprints
 
-This is a one-stop-shop that makes use of the notification system, presents choices to the user with options and simple intelligence to nudge the user to complete an action. The action will be continuously nagging for a resolution, and if all else fails perform the action needed to resolve the alarm. The notifications are meant for multiple users, and designed to inform others that did not respond to the notification, what action was taken or not taken by a user or no users. If nobody responds, then the users all receive a continuous message (nudge) in hopes to resolve the issue. If nobody responds, the users all receive a continuous nudge in hopes of resolving the issue. If HA is capable of resolving it and still gets no response, it performs the action itself and notifies all users of the outcome. Likewise if a user makes a decision, all users are notified of that decision. If this decision is not resolved it loops back through, if it is, a resolved notification is sent. Repetitive nags are necessary in order to force the behavior required to secure sensitive object(s), think gun safes, vaults and what not. 
+A collection of [Home Assistant](https://www.home-assistant.io/) automation blueprints.
+
+## Blueprints
+
+| Blueprint | Description |
+|---|---|
+| [Door/Window Open Alert](door-window-open-alert/) | Configurable, actionable notifications when a door, window, or any other `binary_sensor` is left open too long, with optional auto-close. |
+
+Each blueprint lives in its own folder with its own README covering installation, configuration, and troubleshooting.
+
+## Contributing
+
+Issues and pull requests are welcome. If you spot a bug or have a use case a blueprint should support, open an issue describing the scenario.
+
+## License
+
+[MIT](LICENSE) — do whatever you like with it, just keep the copyright notice.
