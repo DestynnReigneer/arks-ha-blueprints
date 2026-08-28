@@ -30,7 +30,7 @@ blueprint:
       description: The devices that will receive the alert notification.
       selector:
         device:
-          domain: mobile_app
+          integration: mobile_app
           multiple: true
 
     closable_device:
