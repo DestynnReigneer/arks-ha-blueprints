@@ -12,7 +12,7 @@ Each blueprint lives in its own folder with its own README covering installation
 
 ## Contributing
 
-Issues and pull requests are welcome. If you spot a bug or have a use case a blueprint should support, open an issue describing the scenario.
+Issues and pull requests are welcome. If you spot a bug open an issue describing the scenario.
 
 ## License
 
