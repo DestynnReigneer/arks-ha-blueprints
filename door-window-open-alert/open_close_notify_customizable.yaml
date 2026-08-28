@@ -172,7 +172,7 @@ action:
         - repeat:
             for_each: !input notification_devices
             sequence:
-              - action: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
+              - service: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
                 data:
                   title: "{{ alert_title }}"
                   message: !input initial_notification_message
@@ -215,7 +215,7 @@ action:
                 - repeat:
                     for_each: !input notification_devices
                     sequence:
-                      - action: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
+                      - service: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
                         data:
                           message: "clear_notification"
                           data:
@@ -231,7 +231,7 @@ action:
                 - repeat:
                     for_each: !input notification_devices
                     sequence:
-                      - action: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
+                      - service: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
                         data:
                           message: "clear_notification"
                           data:
@@ -256,7 +256,7 @@ action:
                         - repeat:
                             for_each: !input notification_devices
                             sequence:
-                              - action: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
+                              - service: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
                                 data:
                                   message: >-
                                     {{ input('acknowledgment_message_text') | replace('{person}', device_name) }}
@@ -269,13 +269,13 @@ action:
                     # Scenario 2b: Closable Device IS configured
                     - conditions: "{{ has_closable_device }}"
                       sequence:
-                        - action: cover.close_cover
+                        - service: cover.close_cover
                           target:
                             entity_id: !input closable_device
                         - repeat:
                             for_each: !input notification_devices
                             sequence:
-                              - action: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
+                              - service: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
                                 data:
                                   title: "Alert"
                                   message: !input confirmation_message_text
@@ -289,7 +289,7 @@ action:
                               - repeat:
                                   for_each: !input notification_devices
                                   sequence:
-                                    - action: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
+                                    - service: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
                                       data:
                                         title: "Alert"
                                         message: !input failure_message_text
