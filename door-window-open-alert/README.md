@@ -71,7 +71,7 @@ If the sensor flaps (closes and reopens) mid-alert, the automation restarts clea
 
 ## Changelog
 
-See [CHANGELOG.md](CHANGELOG.md) for what's changed release to release. Maintainers: [CHANGELOG-DEV.md](CHANGELOG-DEV.md) has the full technical detail on root causes and fixes.
+See [CHANGELOG.md](CHANGELOG.md) for what's changed release to release.
 
 ## Troubleshooting
 
