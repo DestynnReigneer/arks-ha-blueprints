@@ -4,7 +4,12 @@ All notable changes to the Door/Window Open Alert blueprint are documented here.
 
 ## [Unreleased]
 
-Pending QA — see [PR #6](https://github.com/DestynnReigneer/arks-ha-blueprints/pull/6).
+Pending QA.
+
+### Fixed
+- Automations silently failed to fire (no notification, no error visible to the user) due to an internal template error.
+
+## 2026-08-30
 
 ### Fixed
 - "Missing input closable_device" error when building an automation, even with nothing entered.
