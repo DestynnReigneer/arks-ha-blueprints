@@ -343,7 +343,7 @@ action:
                       sequence:
                         - service: cover.close_cover
                           target:
-                            entity_id: !input closable_device
+                            entity_id: "{{ input('closable_device') }}"
                         - delay:
                             minutes: 1
                         - if: "{{ states(input('sensor_to_monitor')) == 'off' }}"
