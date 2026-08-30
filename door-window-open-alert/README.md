@@ -69,6 +69,10 @@ If the sensor flaps (closes and reopens) mid-alert, the automation restarts clea
 | Confirmation Message | Optional — has a generated default | Only sent once the sensor confirms it's actually closed. | "The garage door closed automatically." |
 | Closing Failure Message | Optional — has a generated default | Sent every 5 minutes while the sensor still shows open after a close command. | "The garage door is still open — please check it." |
 
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for what's changed release to release. Maintainers: [CHANGELOG-DEV.md](CHANGELOG-DEV.md) has the full technical detail on root causes and fixes.
+
 ## Troubleshooting
 
 - **Notification not sent?** Check the automation's trace log (Settings → Automations & Scenes → open the automation → the three-dot menu → Traces) to see exactly which steps ran and where it failed.
