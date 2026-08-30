@@ -9,6 +9,7 @@ Pending QA — see [PR #6](https://github.com/DestynnReigneer/arks-ha-blueprints
 ### Fixed
 - "Missing input closable_device" error when building an automation, even with nothing entered.
 - "Malformed message" error when Option 2's button text fields were left blank.
+- "Message malformed" error on save when Closable Device was left blank.
 - The auto-close confirmation could fire before the door was actually confirmed closed.
 
 ### Changed
