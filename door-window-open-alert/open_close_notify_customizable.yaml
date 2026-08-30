@@ -200,14 +200,31 @@ trigger:
       minutes: !input initial_trigger_time_minutes
 
 variables:
+  # Bind every input that's needed inside a computed template to a plain
+  # variable first. There is no runtime input() template function in Home
+  # Assistant - !input only works as a direct structural substitution, so
+  # anything used inside a {{ }} expression has to go through a variable
+  # like this instead.
+  sensor_to_monitor: !input sensor_to_monitor
+  closable_device: !input closable_device
+  option_1_title_raw: !input option_1_title
+  option_1_delay_minutes: !input option_1_delay_minutes
+  option_3_title_raw: !input option_3_title
+  option_3_delay_minutes: !input option_3_delay_minutes
+  option_2_title_closable: !input option_2_title_closable
+  option_2_title_non_closable: !input option_2_title_non_closable
+  acknowledgment_message_text: !input acknowledgment_message_text
+  confirmation_message_text: !input confirmation_message_text
+  failure_message_text: !input failure_message_text
+
   notification_id: "alert_{{ trigger.entity_id.split('.')[1] }}_{{ now().timestamp() | int }}"
-  has_closable_device: "{{ input('closable_device') not in [none, ''] }}"
+  has_closable_device: "{{ closable_device not in [none, ''] }}"
   closable_device_name: >-
-    {{ (device_attr(device_id(input('closable_device')), 'name') or 'the device') if has_closable_device else '' }}
+    {{ (device_attr(device_id(closable_device), 'name') or 'the device') if has_closable_device else '' }}
   option_2_title: >-
-    {{ (input('option_2_title_closable') or ('Close ' ~ closable_device_name)) if has_closable_device else (input('option_2_title_non_closable') or 'Acknowledge') }}
-  option_1_button_title: "{{ input('option_1_title') or 'Snooze' }} for {{ input('option_1_delay_minutes') }} min"
-  option_3_button_title: "{{ input('option_3_title') or 'Snooze' }} for {{ input('option_3_delay_minutes') }} min"
+    {{ (option_2_title_closable or ('Close ' ~ closable_device_name)) if has_closable_device else (option_2_title_non_closable or 'Acknowledge') }}
+  option_1_button_title: "{{ (option_1_title_raw or 'Snooze') }} for {{ option_1_delay_minutes }} min"
+  option_3_button_title: "{{ (option_3_title_raw or 'Snooze') }} for {{ option_3_delay_minutes }} min"
   alert_title: "Alert"
   # No response has been picked yet, so the first send should sit and wait for
   # a reply rather than nag again right away. 1440 minutes (24h) stands in for
@@ -217,7 +234,7 @@ variables:
 
 action:
   - repeat:
-      while: "{{ states(input('sensor_to_monitor')) == 'on' }}"
+      while: "{{ states(sensor_to_monitor) == 'on' }}"
       sequence:
         # Send (or re-send) the actionable alert to every selected device.
         - repeat:
@@ -281,7 +298,7 @@ action:
                       - service: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
                         data:
                           message: >-
-                            {{ responder_name }} snoozed this alert for {{ input('option_1_delay_minutes') }} minutes (at {{ now().strftime('%H:%M') }}).
+                            {{ responder_name }} snoozed this alert for {{ option_1_delay_minutes }} minutes (at {{ now().strftime('%H:%M') }}).
                           data:
                             tag: "{{ notification_id }}_status"
                 - delay:
@@ -306,7 +323,7 @@ action:
                       - service: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
                         data:
                           message: >-
-                            {{ responder_name }} snoozed this alert for {{ input('option_3_delay_minutes') }} minutes (at {{ now().strftime('%H:%M') }}).
+                            {{ responder_name }} snoozed this alert for {{ option_3_delay_minutes }} minutes (at {{ now().strftime('%H:%M') }}).
                           data:
                             tag: "{{ notification_id }}_status"
                 - delay:
@@ -329,7 +346,7 @@ action:
                               - service: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
                                 data:
                                   message: >-
-                                    {{ input('acknowledgment_message_text') | replace('{person}', responder_name) }} (at {{ now().strftime('%H:%M') }})
+                                    {{ acknowledgment_message_text | replace('{person}', responder_name) }} (at {{ now().strftime('%H:%M') }})
                                   data:
                                     tag: "{{ notification_id }}_status"
                         - variables:
@@ -343,10 +360,10 @@ action:
                       sequence:
                         - service: cover.close_cover
                           target:
-                            entity_id: "{{ input('closable_device') }}"
+                            entity_id: "{{ closable_device }}"
                         - delay:
                             minutes: 1
-                        - if: "{{ states(input('sensor_to_monitor')) == 'off' }}"
+                        - if: "{{ states(sensor_to_monitor) == 'off' }}"
                           then:
                             - repeat:
                                 for_each: !input notification_devices
@@ -355,12 +372,12 @@ action:
                                     data:
                                       title: "Alert"
                                       message: >-
-                                        {{ input('confirmation_message_text') or (closable_device_name ~ ' closed automatically') }} (at {{ now().strftime('%H:%M') }})
+                                        {{ confirmation_message_text or (closable_device_name ~ ' closed automatically') }} (at {{ now().strftime('%H:%M') }})
                                       data:
                                         tag: "{{ notification_id }}_status"
                           else:
                             - repeat:
-                                until: "{{ states(input('sensor_to_monitor')) == 'off' }}"
+                                until: "{{ states(sensor_to_monitor) == 'off' }}"
                                 sequence:
                                   - repeat:
                                       for_each: !input notification_devices
@@ -369,7 +386,7 @@ action:
                                           data:
                                             title: "Alert"
                                             message: >-
-                                              {{ input('failure_message_text') or (closable_device_name ~ ' was told to close, but the sensor still shows open - please check it') }} (at {{ now().strftime('%H:%M') }})
+                                              {{ failure_message_text or (closable_device_name ~ ' was told to close, but the sensor still shows open - please check it') }} (at {{ now().strftime('%H:%M') }})
                                             data:
                                               tag: "{{ notification_id }}_status"
                                   - delay:
@@ -381,7 +398,7 @@ action:
                                     data:
                                       title: "Alert"
                                       message: >-
-                                        {{ input('confirmation_message_text') or (closable_device_name ~ ' closed automatically') }} (at {{ now().strftime('%H:%M') }})
+                                        {{ confirmation_message_text or (closable_device_name ~ ' closed automatically') }} (at {{ now().strftime('%H:%M') }})
                                       data:
                                         tag: "{{ notification_id }}_status"
 
