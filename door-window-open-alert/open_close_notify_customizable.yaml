@@ -2,9 +2,11 @@ blueprint:
   name: Customizable Door/Window Open Alert
   description: >-
     Sends a configurable, actionable notification if a door or window is left
-    open too long. If nobody responds to the very first alert, it resends
-    after 24 hours as a safety net; snoozing instead resends after whichever
-    delay you pick below.
+    open too long. Three buttons, always in the same positions regardless of
+    what you label them: left = Ignore (stops nagging for good), center =
+    Close the device (or a fallback Snooze if nothing can close it), right =
+    Snooze. If nobody responds at all, the alert re-sends marked Urgent and
+    keeps repeating until it's resolved.
   domain: automation
   source_url: https://raw.githubusercontent.com/DestynnReigneer/arks-ha-blueprints/main/door-window-open-alert/open_close_notify_customizable.yaml
 
@@ -44,9 +46,10 @@ blueprint:
         interior door, a safe, a vault, a hinged door with no auto-closer.
         Only fill it in when there's an actual device that can close it for
         you, like a smart garage door opener or a smart lock's cover/switch
-        entity. When set, the second button closes it automatically and
-        confirms once the sensor agrees it's shut. When empty, the second
-        button just lets someone acknowledge they're on it.
+        entity. When set, the center button closes it automatically and
+        confirms once the sensor agrees it's shut. When empty, the center
+        button becomes a second Snooze instead, since there's nothing it can
+        actually close.
       selector:
         entity:
           domain: cover
@@ -63,11 +66,11 @@ blueprint:
           multiline: true
       default: "This has been left open for too long."
 
-    # Button titles and delays
+    # Right-hand button: always Snooze.
     option_1_title:
-      name: Option 1 Button Title
+      name: Snooze Button Title (Right)
       description: >-
-        Text for the first snooze button. The delay you set below is
+        Text for the right-hand Snooze button. The delay you set below is
         appended automatically, so "Snooze" becomes "Snooze for 30 min" on
         the actual button - no need to type the number yourself.
       selector:
@@ -76,8 +79,8 @@ blueprint:
       default: "Snooze"
 
     option_1_delay_minutes:
-      name: Option 1 Delay (minutes)
-      description: "The number of minutes to wait before re-sending the alert. Example: 30."
+      name: Snooze Delay - Right Button (minutes)
+      description: "How long each snooze lasts before re-sending the alert. Example: 30."
       selector:
         number:
           min: 1
@@ -85,8 +88,10 @@ blueprint:
           unit_of_measurement: "minutes"
           mode: box
 
+    # Center button: Close the device if one's configured, otherwise a
+    # second, independent Snooze.
     option_2_title_closable:
-      name: Option 2 Title (If Closable Device Is Set)
+      name: Center Button Title (If Closable Device Is Set)
       description: >-
         Optional. Leave blank and it auto-generates "Close <device name>"
         from the device you picked above. Only fill this in if you want
@@ -97,30 +102,23 @@ blueprint:
       default: ""
 
     option_2_title_non_closable:
-      name: Option 2 Title (If No Device)
+      name: Center Button Title (Fallback Snooze, No Device)
       description: >-
-        Button text shown when no closable device is configured. This just
-        acknowledges someone's checking on it - nothing closes
-        automatically. Example: "Acknowledge" or "I'll check it".
-      selector:
-        text:
-          multiline: false
-      default: "Acknowledge"
-
-    option_3_title:
-      name: Option 3 Button Title
-      description: >-
-        Text for the second snooze button (for a longer delay). Same
-        auto-append behavior as Option 1 - "Snooze" becomes "Snooze for 2
-        hours" on the button.
+        Text for the center button when no closable device is configured -
+        it's just a second Snooze at that point, with its own delay below.
+        Same auto-append behavior as the right-hand Snooze.
       selector:
         text:
           multiline: false
       default: "Snooze"
 
-    option_3_delay_minutes:
-      name: Option 3 Delay (minutes)
-      description: "The number of minutes to wait before re-sending the alert. Example: 120."
+    option_2_fallback_delay_minutes:
+      name: Snooze Delay - Center Button Fallback (minutes)
+      description: >-
+        How long this snooze lasts before re-sending the alert, when the
+        center button is acting as a fallback Snooze (no closable device
+        configured). Independent from the right-hand Snooze's delay.
+        Example: 90.
       selector:
         number:
           min: 1
@@ -128,26 +126,13 @@ blueprint:
           unit_of_measurement: "minutes"
           mode: box
 
-    # Custom messages for the "Acknowledge" path (no closable device)
-    acknowledgment_message_text:
-      name: Acknowledgment Message
+    urgent_recheck_delay_minutes:
+      name: Urgent Recheck Delay (minutes)
       description: >-
-        Broadcast to every device in Notification Devices when someone taps
-        Acknowledge, so everyone knows who's on it and that the alert will
-        pause and resume later if it's still open. Use '{person}' to insert
-        their device name. Example: "{person} is checking on it - this will
-        nag again later if it's still open."
-      selector:
-        text:
-          multiline: true
-      default: "{person} is checking on it now."
-
-    acknowledgment_check_delay_minutes:
-      name: Acknowledgment Check Delay (minutes)
-      description: >-
-        After someone acknowledges, how long to wait before re-checking the
-        sensor and, if it's still open, resending the alert with the Urgent
-        prefix below (same message, same three buttons). Example: 10.
+        Whenever an alert gets no response at all (nobody taps anything),
+        it re-sends marked Urgent after this many minutes, and keeps
+        repeating on this same interval until the sensor closes. An active
+        response (any button) always resets this back to normal. Example: 10.
       selector:
         number:
           min: 1
@@ -158,21 +143,21 @@ blueprint:
     urgent_prefix_text:
       name: Urgent Prefix Text
       description: >-
-        Used as the title when re-sending the alert after an acknowledgment
-        check finds it's still open. Example: "Urgent - still open!".
+        Used as the title when re-sending an alert that got no response at
+        all. Example: "Urgent - still open!".
       selector:
         text:
           multiline: false
       default: "Urgent"
 
-    # Custom messages for the "Close" path (closable device configured)
+    # Custom messages for the closable-device auto-close path.
     confirmation_message_text:
       name: Confirmation Message (Optional)
       description: >-
         Optional. Only sent once the sensor confirms it actually closed -
         never sent optimistically. Leave blank for the default: "<device>
-        closed automatically." A timestamp is appended automatically either
-        way.
+        closed automatically." Use '{person}' to insert whoever pressed
+        Close. A timestamp is appended automatically either way.
       selector:
         text:
           multiline: true
@@ -184,7 +169,8 @@ blueprint:
         Optional. Sent every 5 minutes while the device was told to close
         but the sensor still shows open. Leave blank for the default:
         "<device> was told to close, but the sensor still shows open -
-        please check it." A timestamp is appended automatically either way.
+        please check it." Use '{person}' to insert whoever pressed Close.
+        A timestamp is appended automatically either way.
       selector:
         text:
           multiline: true
@@ -207,29 +193,29 @@ variables:
   # like this instead.
   sensor_to_monitor: !input sensor_to_monitor
   closable_device: !input closable_device
+  initial_notification_message: !input initial_notification_message
   option_1_title_raw: !input option_1_title
   option_1_delay_minutes: !input option_1_delay_minutes
-  option_3_title_raw: !input option_3_title
-  option_3_delay_minutes: !input option_3_delay_minutes
   option_2_title_closable: !input option_2_title_closable
   option_2_title_non_closable: !input option_2_title_non_closable
-  acknowledgment_message_text: !input acknowledgment_message_text
+  option_2_fallback_delay_minutes: !input option_2_fallback_delay_minutes
+  urgent_recheck_delay_minutes: !input urgent_recheck_delay_minutes
   confirmation_message_text: !input confirmation_message_text
   failure_message_text: !input failure_message_text
 
   notification_id: "alert_{{ trigger.entity_id.split('.')[1] }}_{{ now().timestamp() | int }}"
+  sensor_name: "{{ state_attr(sensor_to_monitor, 'friendly_name') or sensor_to_monitor }}"
   has_closable_device: "{{ closable_device not in [none, ''] }}"
   closable_device_name: >-
     {{ (device_attr(device_id(closable_device), 'name') or 'the device') if has_closable_device else '' }}
   option_2_title: >-
-    {{ (option_2_title_closable or ('Close ' ~ closable_device_name)) if has_closable_device else (option_2_title_non_closable or 'Acknowledge') }}
+    {{ (option_2_title_closable or ('Close ' ~ closable_device_name)) if has_closable_device else (option_2_title_non_closable or 'Snooze') }}
   option_1_button_title: "{{ (option_1_title_raw or 'Snooze') }} for {{ option_1_delay_minutes }} min"
-  option_3_button_title: "{{ (option_3_title_raw or 'Snooze') }} for {{ option_3_delay_minutes }} min"
   alert_title: "Alert"
   # No response has been picked yet, so the first send should sit and wait for
   # a reply rather than nag again right away. 1440 minutes (24h) stands in for
   # "no timeout yet" - if truly nobody responds in a day, the alert resends as
-  # a safety net.
+  # a safety net (marked Urgent, same as any other no-response timeout).
   resend_delay_minutes: 1440
 
 action:
@@ -237,30 +223,34 @@ action:
       while: "{{ states(sensor_to_monitor) == 'on' }}"
       sequence:
         # Send (or re-send) the actionable alert to every selected device.
+        # Button order is fixed: left = Ignore, center = Close/fallback
+        # Snooze, right = Snooze - regardless of what each is labeled, so
+        # the position itself is always predictable.
         - repeat:
             for_each: !input notification_devices
             sequence:
               - service: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
                 data:
-                  title: "{{ alert_title }}"
-                  message: !input initial_notification_message
+                  title: "{{ alert_title }} - {{ sensor_name }}"
+                  message: "{{ initial_notification_message }} (at {{ now().strftime('%H:%M') }})"
                   data:
                     actions:
-                      - action: "wait_1"
-                        title: "{{ option_1_button_title }}"
+                      - action: "ignore"
+                        title: "Ignore"
                       - action: "close"
                         title: "{{ option_2_title }}"
-                      - action: "wait_2"
-                        title: "{{ option_3_button_title }}"
+                      - action: "wait_1"
+                        title: "{{ option_1_button_title }}"
                     tag: "{{ notification_id }}"
 
         # Listen for a button press. If nothing arrives within the current
-        # delay, continue_on_timeout lets the loop fall through and resend.
+        # delay, continue_on_timeout lets the loop fall through and resend,
+        # marked Urgent.
         - wait_for_trigger:
             - platform: event
               event_type: mobile_app_notification_action
               event_data:
-                action: "wait_1"
+                action: "ignore"
                 tag: "{{ notification_id }}"
             - platform: event
               event_type: mobile_app_notification_action
@@ -270,7 +260,7 @@ action:
             - platform: event
               event_type: mobile_app_notification_action
               event_data:
-                action: "wait_2"
+                action: "wait_1"
                 tag: "{{ notification_id }}"
           timeout:
             minutes: "{{ resend_delay_minutes }}"
@@ -281,7 +271,29 @@ action:
               {{ (device_attr(wait.trigger.event.data.device_id, 'name') or 'Someone') if wait.trigger is not none else '' }}
 
         - choose:
-            # --- Option 1: Snooze
+            # --- Ignore: stop nagging entirely.
+            - conditions: "{{ wait.trigger is not none and wait.trigger.event.data.action == 'ignore' }}"
+              sequence:
+                - repeat:
+                    for_each: !input notification_devices
+                    sequence:
+                      - service: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
+                        data:
+                          message: "clear_notification"
+                          data:
+                            tag: "{{ notification_id }}"
+                - repeat:
+                    for_each: !input notification_devices
+                    sequence:
+                      - service: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
+                        data:
+                          message: >-
+                            {{ responder_name }} chose to ignore this - no more reminders will be sent (at {{ now().strftime('%H:%M') }}).
+                          data:
+                            tag: "{{ notification_id }}_status"
+                - stop: "Ignored by user"
+
+            # --- Right button: Snooze
             - conditions: "{{ wait.trigger is not none and wait.trigger.event.data.action == 'wait_1' }}"
               sequence:
                 - repeat:
@@ -305,39 +317,14 @@ action:
                     minutes: !input option_1_delay_minutes
                 - variables:
                     resend_delay_minutes: !input option_1_delay_minutes
+                    alert_title: "Alert"
 
-            # --- Option 3: Snooze (longer)
-            - conditions: "{{ wait.trigger is not none and wait.trigger.event.data.action == 'wait_2' }}"
-              sequence:
-                - repeat:
-                    for_each: !input notification_devices
-                    sequence:
-                      - service: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
-                        data:
-                          message: "clear_notification"
-                          data:
-                            tag: "{{ notification_id }}"
-                - repeat:
-                    for_each: !input notification_devices
-                    sequence:
-                      - service: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
-                        data:
-                          message: >-
-                            {{ responder_name }} snoozed this alert for {{ option_3_delay_minutes }} minutes (at {{ now().strftime('%H:%M') }}).
-                          data:
-                            tag: "{{ notification_id }}_status"
-                - delay:
-                    minutes: !input option_3_delay_minutes
-                - variables:
-                    resend_delay_minutes: !input option_3_delay_minutes
-
-            # --- Option 2: Close
+            # --- Center button: Close, or fallback Snooze
             - conditions: "{{ wait.trigger is not none and wait.trigger.event.data.action == 'close' }}"
               sequence:
                 - choose:
-                    # Scenario 2a: No Closable Device configured - acknowledge,
-                    # then keep nagging (with the same buttons live) until the
-                    # sensor closes.
+                    # Scenario 2a: No Closable Device configured - this is
+                    # just a second Snooze with its own delay.
                     - conditions: "{{ not has_closable_device }}"
                       sequence:
                         - repeat:
@@ -345,13 +332,23 @@ action:
                             sequence:
                               - service: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
                                 data:
+                                  message: "clear_notification"
+                                  data:
+                                    tag: "{{ notification_id }}"
+                        - repeat:
+                            for_each: !input notification_devices
+                            sequence:
+                              - service: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
+                                data:
                                   message: >-
-                                    {{ acknowledgment_message_text | replace('{person}', responder_name) }} (at {{ now().strftime('%H:%M') }})
+                                    {{ responder_name }} snoozed this alert for {{ option_2_fallback_delay_minutes }} minutes (at {{ now().strftime('%H:%M') }}).
                                   data:
                                     tag: "{{ notification_id }}_status"
+                        - delay:
+                            minutes: !input option_2_fallback_delay_minutes
                         - variables:
-                            alert_title: !input urgent_prefix_text
-                            resend_delay_minutes: !input acknowledgment_check_delay_minutes
+                            resend_delay_minutes: !input option_2_fallback_delay_minutes
+                            alert_title: "Alert"
 
                     # Scenario 2b: Closable Device IS configured. Never claim
                     # success optimistically - only send the confirmation once
@@ -372,7 +369,7 @@ action:
                                     data:
                                       title: "Alert"
                                       message: >-
-                                        {{ confirmation_message_text or (closable_device_name ~ ' closed automatically') }} (at {{ now().strftime('%H:%M') }})
+                                        {{ (confirmation_message_text or (closable_device_name ~ ' closed automatically, requested by {person}')) | replace('{person}', responder_name) }} (at {{ now().strftime('%H:%M') }})
                                       data:
                                         tag: "{{ notification_id }}_status"
                           else:
@@ -386,7 +383,7 @@ action:
                                           data:
                                             title: "Alert"
                                             message: >-
-                                              {{ failure_message_text or (closable_device_name ~ ' was told to close, but the sensor still shows open - please check it') }} (at {{ now().strftime('%H:%M') }})
+                                              {{ (failure_message_text or (closable_device_name ~ ' was told to close (requested by {person}), but the sensor still shows open - please check it')) | replace('{person}', responder_name) }} (at {{ now().strftime('%H:%M') }})
                                             data:
                                               tag: "{{ notification_id }}_status"
                                   - delay:
@@ -398,11 +395,14 @@ action:
                                     data:
                                       title: "Alert"
                                       message: >-
-                                        {{ confirmation_message_text or (closable_device_name ~ ' closed automatically') }} (at {{ now().strftime('%H:%M') }})
+                                        {{ (confirmation_message_text or (closable_device_name ~ ' closed automatically, requested by {person}')) | replace('{person}', responder_name) }} (at {{ now().strftime('%H:%M') }})
                                       data:
                                         tag: "{{ notification_id }}_status"
 
-            # --- Timeout: nobody responded. Fall through and let the outer
-            # repeat resend at the same cadence.
+            # --- Timeout: nobody responded at all. Mark Urgent and keep
+            # re-sending on the urgent recheck interval until resolved.
             - conditions: "{{ wait.trigger is none }}"
-              sequence: []
+              sequence:
+                - variables:
+                    alert_title: !input urgent_prefix_text
+                    resend_delay_minutes: !input urgent_recheck_delay_minutes
