@@ -5,8 +5,9 @@ blueprint:
     open too long. Three buttons, always in the same positions regardless of
     what you label them: left = Ignore (stops nagging for good), center =
     Close the device (or a fallback Snooze if nothing can close it), right =
-    Snooze. If nobody responds at all, the alert re-sends marked Urgent and
-    keeps repeating until it's resolved.
+    Snooze. Whenever an alert gets zero response, it re-sends and keeps
+    repeating until it's resolved - marked Urgent on your chosen interval if
+    you set one, or on a plain default interval if you don't.
   domain: automation
   source_url: https://raw.githubusercontent.com/DestynnReigneer/arks-ha-blueprints/main/door-window-open-alert/open_close_notify_customizable.yaml
 
@@ -18,6 +19,18 @@ blueprint:
         entity:
           domain: binary_sensor
           multiple: false
+
+    friendly_device_name:
+      name: Friendly Name (Optional)
+      description: >-
+        Optional. Overrides the name shown in notifications, in case the
+        sensor's Home Assistant name isn't what you'd actually call it.
+        Example: your sensor might be named "Master Door contact sensor" in
+        HA, but you'd rather notifications say "Master Bedroom Door."
+      selector:
+        text:
+          multiline: false
+      default: ""
 
     initial_trigger_time_minutes:
       name: Initial Alert Time (minutes)
@@ -71,8 +84,8 @@ blueprint:
       name: Snooze Button Title (Right)
       description: >-
         Text for the right-hand Snooze button. The delay you set below is
-        appended automatically, so "Snooze" becomes "Snooze for 30 min" on
-        the actual button - no need to type the number yourself.
+        appended automatically, so "Snooze" becomes "Snooze (30)" on the
+        actual button - no need to type the number yourself.
       selector:
         text:
           multiline: false
@@ -80,7 +93,7 @@ blueprint:
 
     option_1_delay_minutes:
       name: Snooze Delay - Right Button (minutes)
-      description: "How long each snooze lasts before re-sending the alert. Example: 30."
+      description: "How long this snooze lasts before re-checking. Example: 30."
       selector:
         number:
           min: 1
@@ -115,8 +128,8 @@ blueprint:
     option_2_fallback_delay_minutes:
       name: Snooze Delay - Center Button Fallback (minutes)
       description: >-
-        How long this snooze lasts before re-sending the alert, when the
-        center button is acting as a fallback Snooze (no closable device
+        How long this snooze lasts before re-checking, when the center
+        button is acting as a fallback Snooze (no closable device
         configured). Independent from the right-hand Snooze's delay.
         Example: 90.
       selector:
@@ -129,22 +142,43 @@ blueprint:
     urgent_recheck_delay_minutes:
       name: Urgent Recheck Delay (minutes)
       description: >-
-        Whenever an alert gets no response at all (nobody taps anything),
-        it re-sends marked Urgent after this many minutes, and keeps
-        repeating on this same interval until the sensor closes. An active
-        response (any button) always resets this back to normal. Example: 10.
+        Leave at 0 to turn the Urgent concept off entirely - nagging still
+        continues on the Standard Nag Delay below, just without the Urgent
+        relabeling. Set a real value to turn it on: whenever an alert gets
+        zero response (either the very first alert, or any snooze whose
+        timer ran out with the sensor still open), it re-sends marked
+        Urgent and keeps repeating on this interval until resolved. An
+        active response (any button) always resets back to normal.
+        Example: 10.
+      selector:
+        number:
+          min: 0
+          max: 120
+          unit_of_measurement: "minutes"
+          mode: box
+      default: 0
+
+    standard_nag_delay_minutes:
+      name: Standard Nag Delay (minutes)
+      description: >-
+        How often to keep re-sending the alert (titled normally, not
+        Urgent) whenever it gets zero response and Urgent Recheck Delay is
+        left at 0. Also used for the very first alert's own wait, before
+        anyone's responded to anything yet. Example: 15.
       selector:
         number:
           min: 1
           max: 120
           unit_of_measurement: "minutes"
           mode: box
+      default: 15
 
     urgent_prefix_text:
       name: Urgent Prefix Text
       description: >-
         Used as the title when re-sending an alert that got no response at
-        all. Example: "Urgent - still open!".
+        all, if Urgent Recheck Delay is set above 0. Example: "Urgent -
+        still open!".
       selector:
         text:
           multiline: false
@@ -192,6 +226,7 @@ variables:
   # anything used inside a {{ }} expression has to go through a variable
   # like this instead.
   sensor_to_monitor: !input sensor_to_monitor
+  friendly_device_name: !input friendly_device_name
   closable_device: !input closable_device
   initial_notification_message: !input initial_notification_message
   option_1_title_raw: !input option_1_title
@@ -200,23 +235,34 @@ variables:
   option_2_title_non_closable: !input option_2_title_non_closable
   option_2_fallback_delay_minutes: !input option_2_fallback_delay_minutes
   urgent_recheck_delay_minutes: !input urgent_recheck_delay_minutes
+  standard_nag_delay_minutes: !input standard_nag_delay_minutes
+  urgent_prefix_text: !input urgent_prefix_text
   confirmation_message_text: !input confirmation_message_text
   failure_message_text: !input failure_message_text
 
   notification_id: "alert_{{ trigger.entity_id.split('.')[1] }}_{{ now().timestamp() | int }}"
-  sensor_name: "{{ state_attr(sensor_to_monitor, 'friendly_name') or sensor_to_monitor }}"
+  sensor_name: >-
+    {{ friendly_device_name or state_attr(sensor_to_monitor, 'friendly_name') or sensor_to_monitor }}
   has_closable_device: "{{ closable_device not in [none, ''] }}"
   closable_device_name: >-
     {{ (device_attr(device_id(closable_device), 'name') or 'the device') if has_closable_device else '' }}
+  option_1_button_title: "{{ (option_1_title_raw or 'Snooze') }} ({{ option_1_delay_minutes }})"
+  option_2_fallback_button_title: "{{ (option_2_title_non_closable or 'Snooze') }} ({{ option_2_fallback_delay_minutes }})"
   option_2_title: >-
-    {{ (option_2_title_closable or ('Close ' ~ closable_device_name)) if has_closable_device else (option_2_title_non_closable or 'Snooze') }}
-  option_1_button_title: "{{ (option_1_title_raw or 'Snooze') }} for {{ option_1_delay_minutes }} min"
+    {{ (option_2_title_closable or ('Close ' ~ closable_device_name)) if has_closable_device else option_2_fallback_button_title }}
+
+  # Whenever an alert gets zero response - the very first one, or any
+  # snooze whose timer ran out with the sensor still open - it escalates to
+  # this same title/delay. Urgent only if a real recheck delay was set;
+  # otherwise it stays a plain, repeating nag on the standard interval.
+  urgent_enabled: "{{ urgent_recheck_delay_minutes | int(0) > 0 }}"
+  escalated_title: "{{ urgent_prefix_text if urgent_enabled else 'Alert' }}"
+  escalated_delay_minutes: "{{ urgent_recheck_delay_minutes if urgent_enabled else standard_nag_delay_minutes }}"
+
   alert_title: "Alert"
-  # No response has been picked yet, so the first send should sit and wait for
-  # a reply rather than nag again right away. 1440 minutes (24h) stands in for
-  # "no timeout yet" - if truly nobody responds in a day, the alert resends as
-  # a safety net (marked Urgent, same as any other no-response timeout).
-  resend_delay_minutes: 1440
+  # Nobody has had a chance to respond yet, so the very first wait uses the
+  # same escalation delay a no-response timeout would use later.
+  resend_delay_minutes: "{{ escalated_delay_minutes }}"
 
 action:
   - repeat:
@@ -244,8 +290,7 @@ action:
                     tag: "{{ notification_id }}"
 
         # Listen for a button press. If nothing arrives within the current
-        # delay, continue_on_timeout lets the loop fall through and resend,
-        # marked Urgent.
+        # delay, continue_on_timeout lets the loop fall through and escalate.
         - wait_for_trigger:
             - platform: event
               event_type: mobile_app_notification_action
@@ -293,7 +338,9 @@ action:
                             tag: "{{ notification_id }}_status"
                 - stop: "Ignored by user"
 
-            # --- Right button: Snooze
+            # --- Right button: Snooze. A one-time quiet period - once it
+            # ends, if the sensor's still open, escalate (Urgent or
+            # standard nag, per whether a recheck delay was configured).
             - conditions: "{{ wait.trigger is not none and wait.trigger.event.data.action == 'wait_1' }}"
               sequence:
                 - repeat:
@@ -316,15 +363,17 @@ action:
                 - delay:
                     minutes: !input option_1_delay_minutes
                 - variables:
-                    resend_delay_minutes: !input option_1_delay_minutes
-                    alert_title: "Alert"
+                    alert_title: "{{ escalated_title }}"
+                    resend_delay_minutes: "{{ escalated_delay_minutes }}"
 
             # --- Center button: Close, or fallback Snooze
             - conditions: "{{ wait.trigger is not none and wait.trigger.event.data.action == 'close' }}"
               sequence:
                 - choose:
                     # Scenario 2a: No Closable Device configured - this is
-                    # just a second Snooze with its own delay.
+                    # just a second Snooze with its own delay. Same
+                    # escalate-after-quiet-period behavior as the right
+                    # button.
                     - conditions: "{{ not has_closable_device }}"
                       sequence:
                         - repeat:
@@ -347,8 +396,8 @@ action:
                         - delay:
                             minutes: !input option_2_fallback_delay_minutes
                         - variables:
-                            resend_delay_minutes: !input option_2_fallback_delay_minutes
-                            alert_title: "Alert"
+                            alert_title: "{{ escalated_title }}"
+                            resend_delay_minutes: "{{ escalated_delay_minutes }}"
 
                     # Scenario 2b: Closable Device IS configured. Never claim
                     # success optimistically - only send the confirmation once
@@ -399,10 +448,10 @@ action:
                                       data:
                                         tag: "{{ notification_id }}_status"
 
-            # --- Timeout: nobody responded at all. Mark Urgent and keep
-            # re-sending on the urgent recheck interval until resolved.
+            # --- Timeout: nobody responded at all. Escalate exactly like a
+            # snooze's timer running out.
             - conditions: "{{ wait.trigger is none }}"
               sequence:
                 - variables:
-                    alert_title: !input urgent_prefix_text
-                    resend_delay_minutes: !input urgent_recheck_delay_minutes
+                    alert_title: "{{ escalated_title }}"
+                    resend_delay_minutes: "{{ escalated_delay_minutes }}"
