@@ -6,8 +6,12 @@ All notable changes to the Door/Window Open Alert blueprint are documented here.
 
 Pending QA.
 
-### Fixed
-- Automations silently failed to fire (no notification, no error visible to the user) due to an internal template error.
+### Changed
+- **Button layout redesigned.** Buttons now have fixed positions regardless of label: left is always Ignore (new — stops the alert entirely), center is always Close-the-device-or-a-fallback-Snooze, right is always Snooze.
+- **Urgent behavior reworked.** Urgent now specifically means "this alert got zero response" and resets back to normal the moment anyone responds, instead of sticking permanently after one acknowledgment. It keeps repeating on the Urgent Recheck Delay until resolved.
+- The Acknowledge option is gone — with no closable device, the center button is now just a second, independently-timed Snooze.
+- Every notification (including Urgent resends) now shows the sensor's name in the title and a timestamp in the message.
+- The auto-close confirmation and failure messages now name who requested the close.
 
 ## 2026-08-30
 
@@ -15,6 +19,7 @@ Pending QA.
 - "Missing input closable_device" error when building an automation, even with nothing entered.
 - "Malformed message" error when Option 2's button text fields were left blank.
 - "Message malformed" error on save when Closable Device was left blank.
+- Automations silently failed to fire (no notification, no error visible to the user) due to an internal template error.
 - The auto-close confirmation could fire before the door was actually confirmed closed.
 
 ### Changed
