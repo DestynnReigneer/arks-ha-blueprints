@@ -17,7 +17,8 @@ It's a one-stop notification system: it presents the user with choices, nudges t
 - **Fully customizable text** — initial message, button titles, confirmation message, and failure message are all inputs.
 - **Configurable delays** — set the initial trigger time and an independent re-notification delay per snooze option.
 - **Optional auto-close** — point it at a `cover` entity and it will attempt to close it automatically and confirm the result, instead of just asking someone to close it by hand.
-- **Real urgent escalation** — a genuinely unanswered alert (nobody taps anything) is what triggers the Urgent relabeling, not any prior response — and it resets back to normal the moment someone actually responds.
+- **Real urgent escalation** — an unanswered alert, whether nobody ever responded or a snooze simply ran out with the door still open, is what triggers escalation. Urgent (a distinct relabeling on your own recheck interval) is optional — leave it off and the alert still keeps nagging forever on a plain default interval instead.
+- **Custom display name** — override the sensor's Home Assistant name in notifications if it's too technical to read at a glance.
 
 ## How It Works
 
@@ -26,15 +27,15 @@ It's a one-stop notification system: it presents the user with choices, nudges t
    - **Left — Ignore.** Stops the automation entirely for this occurrence. Broadcasts who ignored it to every device first.
    - **Center — Close, or a fallback Snooze.** If a Closable Device is configured, this closes it automatically. If not, this is just a second Snooze with its own independent delay.
    - **Right — Snooze.** The original snooze option, with its own delay.
-   - Both snooze buttons automatically show their delay on the label itself, e.g. "Snooze for 30 min" — no need to type the number.
+   - Both snooze buttons automatically show their delay on the label itself, e.g. "Snooze (30)" — no need to type the number.
 3. Depending on which button is pressed (or if nobody responds):
-   - **No response at all** — the alert re-sends marked **Urgent** after the configured Urgent Recheck Delay, and keeps repeating on that interval until the sensor closes. The very first alert uses a 24-hour fallback for this if you haven't set anything yet — it's not something you configure directly, it's just the safety net before any real response has happened.
-   - **Snooze (either button)** — every device gets told who snoozed it and for how long, the alert is dismissed, and it's re-sent (with working buttons again, retitled back to normal) after the chosen delay.
+   - **Snooze (either button)** — every device gets told who snoozed it and for how long, the alert is dismissed, and nothing happens for that chosen delay. A snooze is a one-time quiet period, not its own repeating cycle — once it ends, the sensor is checked once.
+   - **After that check (or after the very first alert gets no response at all)** — if the sensor's closed, the automation is done. If it's still open, the alert re-sends and escalates: **marked Urgent** on your configured Urgent Recheck Delay if you set one, or just re-sent normally on the Standard Nag Delay if you left Urgent at 0 — either way, it keeps repeating on that interval until the sensor closes. Nagging never silently stops; only the Urgent relabeling is optional.
    - **Close, with no closable device configured** — behaves exactly like a snooze (see above), using its own fallback delay.
    - **Close, with a closable device configured** — calls `cover.close_cover`, waits a minute, then checks the sensor. If it's actually closed, sends the confirmation message (naming who requested it); if not, it retries every 5 minutes with the failure message until the sensor agrees it's shut. The confirmation is never sent optimistically — only once the sensor itself confirms it.
    - **Ignore** — the loop stops. If the sensor later closes and reopens, a fresh cycle starts from scratch.
 
-Every notification — including the initial alert and every Urgent resend — shows the sensor's name in the title and a timestamp in the message, so it's always clear what's open and when the message was sent, without having to open the app.
+Every notification — including the initial alert and every escalated resend — shows the sensor's name (or your custom Friendly Name) in the title and a timestamp in the message, so it's always clear what's open and when the message was sent, without having to open the app.
 
 If the sensor flaps (closes and reopens) mid-alert, the automation restarts cleanly for the new open event instead of running two nag loops at once.
 
@@ -61,17 +62,19 @@ If the sensor flaps (closes and reopens) mid-alert, the automation restarts clea
 | Field | Required? | Description | Example |
 |---|---|---|---|
 | Sensor to Monitor | Required | The `binary_sensor` that triggers the alert. | `binary_sensor.garage_door_sensor` |
+| Friendly Name | Optional — falls back to the sensor's HA name | Overrides the name shown in notifications. | "Master Bedroom Door" |
 | Initial Alert Time (minutes) | Required | How long the sensor must be `on` before the first alert. | `15` for a garage door, `5` for a mailbox |
 | Notification Devices | Required | Mobile app devices to notify. | — |
 | Closable Device | Optional — leave blank if nothing can auto-close it | A `cover` entity the blueprint can command closed. Leave blank for doors a person has to check (interior doors, safes, vaults) — the center button becomes a second Snooze instead. | `cover.garage_door` |
 | Initial Notification Message | Optional — defaults to a generic message | The primary alert message. | "The garage door has been open for too long." |
-| Snooze Button Title (Right) | Optional — defaults to "Snooze" | Base text for the right-hand button. Its delay is appended automatically ("Snooze for 30 min"). | "Snooze" |
-| Snooze Delay - Right Button (minutes) | Required | How long this snooze lasts before re-nagging. | `30` |
+| Snooze Button Title (Right) | Optional — defaults to "Snooze" | Base text for the right-hand button. Its delay is appended automatically ("Snooze (30)"). | "Snooze" |
+| Snooze Delay - Right Button (minutes) | Required | How long this snooze lasts before re-checking. | `30` |
 | Center Button Title (Closable Device Set) | Optional — auto-generates "Close \<device name\>" if left blank | Only fill in for different wording. | "Shut Garage" |
 | Center Button Title (Fallback Snooze, No Device) | Optional — defaults to "Snooze" | Text for the center button when it's acting as a fallback snooze. | "Snooze" |
 | Snooze Delay - Center Button Fallback (minutes) | Required | How long the fallback snooze lasts, independent of the right button's delay. | `90` |
-| Urgent Recheck Delay (minutes) | Required | Whenever an alert gets zero response, how long before it re-sends marked Urgent, and how often it repeats after that until resolved. | `10` |
-| Urgent Prefix Text | Optional — defaults to "Urgent" | Title used on a re-sent alert that got no response at all. | "Urgent - still open!" |
+| Urgent Recheck Delay (minutes) | Optional — 0 turns Urgent off | Whenever an alert gets zero response, how long before it re-sends marked Urgent, and how often it repeats after that until resolved. Leave at `0` to keep nagging on the Standard Nag Delay instead, without the Urgent relabeling. | `10` |
+| Standard Nag Delay (minutes) | Optional — defaults to `15` | Used instead of Urgent Recheck Delay whenever that's left at 0, and for the very first alert's own wait. | `15` |
+| Urgent Prefix Text | Optional — defaults to "Urgent" | Title used on a re-sent alert that got no response at all, when Urgent Recheck Delay is set above 0. | "Urgent - still open!" |
 | Confirmation Message | Optional — has a generated default | Only sent once the sensor confirms it's actually closed. Use `{person}` for whoever pressed Close. | "The garage door closed automatically, requested by {person}." |
 | Closing Failure Message | Optional — has a generated default | Sent every 5 minutes while the sensor still shows open after a close command. Use `{person}` for whoever pressed Close. | "The garage door is still open — please check it." |
 
