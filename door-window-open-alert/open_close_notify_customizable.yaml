@@ -266,6 +266,10 @@ variables:
   # same escalation delay a no-response timeout would use later.
   resend_delay_minutes: "{{ escalated_delay_minutes }}"
 
+  # Run-scoped default. The loop redefines this each pass when someone
+  # actually taps a button; a close that happens with nobody responding
+  # leaves it blank, which the messages render as "someone".
+  responder_name: ""
 
 action:
   - repeat:
@@ -344,7 +348,9 @@ action:
             # does nothing here - the loop's own condition ends it, and the
             # single closed-handler after the loop sends the message.
             - conditions: "{{ states(sensor_to_monitor) == 'off' }}"
-              sequence: []
+              sequence:
+                - variables:
+                    closed_before_handling: true
 
             # --- Ignore: stop nagging entirely.
             - conditions: "{{ responder_is_button and wait.trigger.event.data.action == 'ignore' }}"
