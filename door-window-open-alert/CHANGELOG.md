@@ -7,6 +7,15 @@ All notable changes to the Door/Window Open Alert blueprint are documented here.
 Pending QA.
 
 ### Added
+- **The center button can now run any entity, not just a `cover`.** Point it at a cover, lock, switch, light, fan, input boolean, script, scene, or button. This is what makes the button usable at all for most setups — previously it required a `cover` entity, so anyone whose door closer is a relay, a smart plug, or a script had no way to use it.
+- **New "Action to Perform" field.** Defaults to Automatic, which picks the right action from the entity type: covers close, locks lock, buttons press, scripts and scenes run, everything else turns off. Override it for hardware where that's backwards — most commonly a momentary relay that *closes* a door by being switched **on**.
+- The center button's label now writes itself from the device and the action ("Close Garage Door", "Turn Off Porch Light") instead of always saying "Close".
+
+### Changed
+- "Closable Device" is now called **Action Device**, and "Closing Failure Message" is now **Action Failure Message**, since neither is limited to closing any more. Existing automations keep their settings — only the labels changed.
+- The auto-fix confirmation and failure messages now name both the sensor and the device that acted, and no longer assume the action was "closing".
+
+### Added
 - **Closing the sensor by hand now ends the alert and tells everyone.** Previously a physical close only stopped the nagging quietly, with no closing notification, and only at the next timeout. Now the automation watches the sensor throughout, so a manual close clears the alert and sends the confirmation message immediately, from any point in the cycle: the first wait, a snooze, or between nags.
 - **The sensor state is re-checked before any button press is acted on.** If it already closed in the seconds before someone taps, the tap is ignored instead of acted on, so a late Close tap can't re-open a toggle-style device and a late Snooze can't silence an alert that's already resolved.
 

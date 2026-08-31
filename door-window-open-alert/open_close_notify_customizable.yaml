@@ -53,21 +53,62 @@ blueprint:
           multiple: true
 
     closable_device:
-      name: Closable Device (Optional)
+      name: Action Device (Optional)
       description: >-
-        Leave this empty for anything a person has to check in person - an
-        interior door, a safe, a vault, a hinged door with no auto-closer.
-        Only fill it in when there's an actual device that can close it for
-        you, like a smart garage door opener or a smart lock's cover/switch
-        entity. When set, the center button closes it automatically and
-        confirms once the sensor agrees it's shut. When empty, the center
-        button becomes a second Snooze instead, since there's nothing it can
-        actually close.
+        Any entity that can actually resolve the alert - a garage opener
+        (cover), a smart lock, a switch or relay wired to a door closer, a
+        light, a fan, an input boolean, or a script or scene that does
+        whatever needs doing. When set, the center button runs it and then
+        confirms once the sensor itself agrees the problem is fixed. Leave
+        empty for anything a person has to handle physically (an interior
+        door, a safe, a vault) - the center button becomes a second Snooze
+        instead, since there is nothing for it to run.
       selector:
         entity:
-          domain: cover
+          domain:
+            - cover
+            - lock
+            - switch
+            - light
+            - fan
+            - input_boolean
+            - script
+            - scene
+            - button
           multiple: false
       default: ""
+
+    close_action:
+      name: Action to Perform (Optional)
+      description: >-
+        What to do to the Action Device. Leave on Automatic and the right
+        thing is picked from the entity type - covers close, locks lock,
+        buttons get pressed, scripts and scenes run, and everything else
+        turns off. Override it when the automatic choice is backwards for
+        your setup - most often a relay or smart plug that CLOSES a door by
+        being turned ON rather than off. Ignored when no Action Device is
+        set.
+      default: auto
+      selector:
+        select:
+          mode: dropdown
+          options:
+            - label: Automatic (recommended)
+              value: auto
+            - label: Turn off
+              value: turn_off
+            - label: Turn on / run
+              value: turn_on
+            - label: Close (covers)
+              value: close
+            - label: Open (covers)
+              value: open
+            - label: Lock
+              value: lock
+            - label: Unlock
+              value: unlock
+            - label: Press (buttons)
+              value: press
 
     initial_notification_message:
       name: Initial Notification Message
@@ -104,11 +145,11 @@ blueprint:
     # Center button: Close the device if one's configured, otherwise a
     # second, independent Snooze.
     option_2_title_closable:
-      name: Center Button Title (If Closable Device Is Set)
+      name: Center Button Title (If Action Device Is Set)
       description: >-
-        Optional. Leave blank and it auto-generates "Close <device name>"
-        from the device you picked above. Only fill this in if you want
-        different wording, e.g. "Shut Garage".
+        Optional. Leave blank and it auto-generates a label from the device
+        and the action, e.g. "Close Garage Door" or "Turn Off Porch Light".
+        Only fill this in if you want different wording, e.g. "Shut Garage".
       selector:
         text:
           multiline: false
@@ -200,13 +241,13 @@ blueprint:
       default: ""
 
     failure_message_text:
-      name: Closing Failure Message (Optional)
+      name: Action Failure Message (Optional)
       description: >-
-        Optional. Sent every 5 minutes while the device was told to close
-        but the sensor still shows open. Leave blank for the default:
-        "<device> was told to close, but the sensor still shows open -
-        please check it." Use '{person}' to insert whoever pressed Close.
-        A timestamp is appended automatically either way.
+        Optional. Sent every 5 minutes while the Action Device has been run
+        but the sensor still shows open. Leave blank for a generated
+        default naming both the device and the sensor. Use '{person}' to
+        insert whoever pressed the button. A timestamp is appended
+        automatically either way.
       selector:
         text:
           multiline: true
@@ -230,6 +271,7 @@ variables:
   sensor_to_monitor: !input sensor_to_monitor
   friendly_device_name: !input friendly_device_name
   closable_device: !input closable_device
+  close_action: !input close_action
   initial_notification_message: !input initial_notification_message
   option_1_title_raw: !input option_1_title
   option_1_delay_minutes: !input option_1_delay_minutes
@@ -246,12 +288,45 @@ variables:
   sensor_name: >-
     {{ friendly_device_name or state_attr(sensor_to_monitor, 'friendly_name') or sensor_to_monitor }}
   has_closable_device: "{{ closable_device not in [none, ''] }}"
+  # friendly_name, not the device registry: an input_boolean, script,
+  # scene, or template switch has no device behind it at all, so
+  # device_attr(device_id(...)) would come up empty for exactly the
+  # entities this input was just opened up to accept.
   closable_device_name: >-
-    {{ (device_attr(device_id(closable_device), 'name') or 'the device') if has_closable_device else '' }}
+    {{ (state_attr(closable_device, 'friendly_name') or closable_device) if has_closable_device else '' }}
+  closable_device_domain: >-
+    {{ closable_device.split('.')[0] if has_closable_device else '' }}
+
+  # Automatic picks the sensible service per entity type; an explicit
+  # choice always wins. homeassistant.turn_on/turn_off cover the generic
+  # cases because they work across every domain that has the concept, so
+  # one branch handles switch, light, fan, input_boolean, script and
+  # scene alike.
+  close_action_service: >-
+    {%- if close_action == 'turn_off' %}homeassistant.turn_off
+    {%- elif close_action == 'turn_on' %}homeassistant.turn_on
+    {%- elif close_action == 'close' %}cover.close_cover
+    {%- elif close_action == 'open' %}cover.open_cover
+    {%- elif close_action == 'lock' %}lock.lock
+    {%- elif close_action == 'unlock' %}lock.unlock
+    {%- elif close_action == 'press' %}button.press
+    {%- elif closable_device_domain == 'cover' %}cover.close_cover
+    {%- elif closable_device_domain == 'lock' %}lock.lock
+    {%- elif closable_device_domain == 'button' %}button.press
+    {%- elif closable_device_domain in ['script', 'scene'] %}homeassistant.turn_on
+    {%- else %}homeassistant.turn_off{%- endif %}
+  close_action_verb: >-
+    {%- if close_action_service == 'cover.close_cover' %}Close
+    {%- elif close_action_service == 'cover.open_cover' %}Open
+    {%- elif close_action_service == 'lock.lock' %}Lock
+    {%- elif close_action_service == 'lock.unlock' %}Unlock
+    {%- elif close_action_service == 'button.press' %}Press
+    {%- elif close_action_service == 'homeassistant.turn_on' %}Turn On
+    {%- else %}Turn Off{%- endif %}
   option_1_button_title: "{{ (option_1_title_raw or 'Snooze') }} ({{ option_1_delay_minutes }})"
   option_2_fallback_button_title: "{{ (option_2_title_non_closable or 'Snooze') }} ({{ option_2_fallback_delay_minutes }})"
   option_2_title: >-
-    {{ (option_2_title_closable or ('Close ' ~ closable_device_name)) if has_closable_device else option_2_fallback_button_title }}
+    {{ (option_2_title_closable or (close_action_verb ~ ' ' ~ closable_device_name)) if has_closable_device else option_2_fallback_button_title }}
 
   # Whenever an alert gets zero response - the very first one, or any
   # snooze whose timer ran out with the sensor still open - it escalates to
@@ -450,7 +525,7 @@ action:
                     # the sensor itself agrees it's closed.
                     - conditions: "{{ has_closable_device }}"
                       sequence:
-                        - service: cover.close_cover
+                        - service: "{{ close_action_service }}"
                           target:
                             entity_id: "{{ closable_device }}"
                         - wait_for_trigger:
@@ -469,7 +544,7 @@ action:
                                     data:
                                       title: "Closed - {{ sensor_name }}"
                                       message: >-
-                                        {{ (confirmation_message_text or (closable_device_name ~ ' closed automatically, requested by {person}')) | replace('{person}', responder_name or 'someone') }} @ {{ now().strftime('%H:%M') }}
+                                        {{ (confirmation_message_text or (sensor_name ~ ' is now closed - ' ~ closable_device_name ~ ' handled it, requested by {person}')) | replace('{person}', responder_name or 'someone') }} @ {{ now().strftime('%H:%M') }}
                                       data:
                                         tag: "{{ notification_id }}_status"
                             - stop: "Closed automatically"
@@ -484,7 +559,7 @@ action:
                                           data:
                                             title: "Still Open - {{ sensor_name }}"
                                             message: >-
-                                              {{ (failure_message_text or (closable_device_name ~ ' was told to close (requested by {person}), but the sensor still shows open - please check it')) | replace('{person}', responder_name or 'someone') }} @ {{ now().strftime('%H:%M') }}
+                                              {{ (failure_message_text or (closable_device_name ~ ' was run (requested by {person}), but ' ~ sensor_name ~ ' still shows open - please check it')) | replace('{person}', responder_name or 'someone') }} @ {{ now().strftime('%H:%M') }}
                                             data:
                                               tag: "{{ notification_id }}_status"
                                   - wait_for_trigger:
@@ -501,7 +576,7 @@ action:
                                     data:
                                       title: "Closed - {{ sensor_name }}"
                                       message: >-
-                                        {{ (confirmation_message_text or (closable_device_name ~ ' closed automatically, requested by {person}')) | replace('{person}', responder_name or 'someone') }} @ {{ now().strftime('%H:%M') }}
+                                        {{ (confirmation_message_text or (sensor_name ~ ' is now closed - ' ~ closable_device_name ~ ' handled it, requested by {person}')) | replace('{person}', responder_name or 'someone') }} @ {{ now().strftime('%H:%M') }}
                                       data:
                                         tag: "{{ notification_id }}_status"
                             - stop: "Closed after retries"
