@@ -6,7 +6,17 @@ All notable changes to the Door/Window Open Alert blueprint are documented here.
 
 Pending QA.
 
+### Added
+- **Closing the sensor by hand now ends the alert and tells everyone.** Previously a physical close only stopped the nagging quietly, with no closing notification, and only at the next timeout. Now the automation watches the sensor throughout, so a manual close clears the alert and sends the confirmation message immediately, from any point in the cycle: the first wait, a snooze, or between nags.
+- **The sensor state is re-checked before any button press is acted on.** If it already closed in the seconds before someone taps, the tap is ignored instead of acted on, so a late Close tap can't re-open a toggle-style device and a late Snooze can't silence an alert that's already resolved.
+
+### Fixed
+- **Confirmation Message now actually fires.** It was only reachable on the auto-close path, so with no Closable Device configured it never appeared no matter what was typed in it. It now sends on any confirmed close.
+- **Status messages name the person, not the phone.** Snooze/Ignore/Close broadcasts now resolve to the Home Assistant person linked to the account that tapped the button, falling back to the device name and then to a generic word.
+- Snoozes and the auto-close retry loop no longer sit through their full delay after the sensor has closed. They end as soon as it does.
+
 ### Changed
+- Timestamps in every notification changed from `(at 14:30)` to `@ 14:30`.
 - **Urgent is now optional.** Leave Urgent Recheck Delay at `0` and nagging still continues forever on a new Standard Nag Delay instead — only the Urgent relabeling turns off.
 - **Snoozing now escalates properly.** A snooze is a one-time quiet period; once it runs out with the door still open, the alert escalates straight into the Urgent-or-standard-nag cadence, instead of resending a plain alert first. Fixes Urgent not firing after a snooze.
 - New optional Friendly Name input, to override the sensor's Home Assistant name in notifications.
