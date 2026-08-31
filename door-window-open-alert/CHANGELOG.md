@@ -16,6 +16,7 @@ Pending QA.
 - Snoozes and the auto-close retry loop no longer sit through their full delay after the sensor has closed. They end as soon as it does.
 
 ### Changed
+- **Status broadcasts now say which sensor they're about.** "Someone snoozed this alert for 5 minutes" gave no way to tell which door it meant when more than one alert was running. Every snooze, ignore, close, and still-open message now names the sensor in both the notification title and the message body.
 - Timestamps in every notification changed from `(at 14:30)` to `@ 14:30`.
 - **Urgent is now optional.** Leave Urgent Recheck Delay at `0` and nagging still continues forever on a new Standard Nag Delay instead — only the Urgent relabeling turns off.
 - **Snoozing now escalates properly.** A snooze is a one-time quiet period; once it runs out with the door still open, the alert escalates straight into the Urgent-or-standard-nag cadence, instead of resending a plain alert first. Fixes Urgent not firing after a snooze.

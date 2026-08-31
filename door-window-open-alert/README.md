@@ -20,7 +20,7 @@ It's a one-stop notification system: it presents the user with choices, nudges t
 - **Real urgent escalation** — an unanswered alert, whether nobody ever responded or a snooze simply ran out with the door still open, is what triggers escalation. Urgent (a distinct relabeling on your own recheck interval) is optional — leave it off and the alert still keeps nagging forever on a plain default interval instead.
 - **Custom display name** — override the sensor's Home Assistant name in notifications if it's too technical to read at a glance.
 - **Resolves the moment the sensor closes** — however it closes, by hand or automatically, the alert clears, everyone gets a closing confirmation, and the automation ends. It doesn't sit waiting out a snooze or a nag timer first.
-- **Names who responded** — snooze, ignore, and close broadcasts use the Home Assistant person linked to the account that tapped the button.
+- **Names who responded, and what they responded to** — snooze, ignore, and close broadcasts use the Home Assistant person linked to the account that tapped the button, and name the sensor in both the title and the message, so several doors running at once never produce an ambiguous "someone snoozed this alert".
 
 ## How It Works
 
@@ -39,7 +39,7 @@ It's a one-stop notification system: it presents the user with choices, nudges t
 4. **At any point, if the sensor closes, the alert is over.** The blueprint watches the sensor the whole time, not just between nags, so a door closed by hand ends the cycle right then: the open alert is dismissed on every device and a closing confirmation goes out. That applies during the first wait, during a snooze, and during the auto-close retry loop.
 5. **A button press is only acted on if the sensor is still open.** The state is re-checked at the moment of the tap. If someone taps Close a few seconds after the door was already shut, that press is discarded rather than sent to the device — so a toggle-style closer can't be flipped back open — and a late Snooze can't silence an alert that's already resolved.
 
-Every notification — including the initial alert and every escalated resend — shows the sensor's name (or your custom Friendly Name) in the title and a timestamp in the message (`@ 14:30`), so it's always clear what's open and when the message was sent, without having to open the app.
+**Every** notification names the sensor — not just the alerts, but the "X snoozed this" / "X ignored this" broadcasts and the closing confirmation too. Each one shows the sensor's name (or your custom Friendly Name) in the title *and* in the message body, plus a timestamp (`@ 14:30`). If you're running this blueprint on several doors at once, you can always tell which one a message is about at a glance, without opening the app.
 
 If the sensor flaps (closes and reopens) mid-alert, the automation restarts cleanly for the new open event instead of running two nag loops at once.
 

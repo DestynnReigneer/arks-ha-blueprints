@@ -368,8 +368,9 @@ action:
                     sequence:
                       - service: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
                         data:
+                          title: "Ignored - {{ sensor_name }}"
                           message: >-
-                            {{ responder_name }} chose to ignore this - no more reminders will be sent @ {{ now().strftime('%H:%M') }}
+                            {{ responder_name }} ignored the {{ sensor_name }} alert - no more reminders will be sent @ {{ now().strftime('%H:%M') }}
                           data:
                             tag: "{{ notification_id }}_status"
                 - stop: "Ignored by user"
@@ -391,8 +392,9 @@ action:
                     sequence:
                       - service: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
                         data:
+                          title: "Snoozed - {{ sensor_name }}"
                           message: >-
-                            {{ responder_name }} snoozed this alert for {{ option_1_delay_minutes }} minutes @ {{ now().strftime('%H:%M') }}
+                            {{ responder_name }} snoozed the {{ sensor_name }} alert for {{ option_1_delay_minutes }} minutes @ {{ now().strftime('%H:%M') }}
                           data:
                             tag: "{{ notification_id }}_status"
                 - wait_for_trigger:
@@ -427,8 +429,9 @@ action:
                             sequence:
                               - service: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
                                 data:
+                                  title: "Snoozed - {{ sensor_name }}"
                                   message: >-
-                                    {{ responder_name }} snoozed this alert for {{ option_2_fallback_delay_minutes }} minutes @ {{ now().strftime('%H:%M') }}
+                                    {{ responder_name }} snoozed the {{ sensor_name }} alert for {{ option_2_fallback_delay_minutes }} minutes @ {{ now().strftime('%H:%M') }}
                                   data:
                                     tag: "{{ notification_id }}_status"
                         - wait_for_trigger:
@@ -479,7 +482,7 @@ action:
                                       sequence:
                                         - service: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
                                           data:
-                                            title: "Alert"
+                                            title: "Still Open - {{ sensor_name }}"
                                             message: >-
                                               {{ (failure_message_text or (closable_device_name ~ ' was told to close (requested by {person}), but the sensor still shows open - please check it')) | replace('{person}', responder_name or 'someone') }} @ {{ now().strftime('%H:%M') }}
                                             data:
