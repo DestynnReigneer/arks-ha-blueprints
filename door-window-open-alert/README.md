@@ -16,7 +16,7 @@ It's a one-stop notification system: it presents the user with choices, nudges t
 - **Actionable notifications with fixed button positions** — left is always Ignore, center is always Close-or-fallback-Snooze, right is always Snooze, regardless of how you label them. Positions stay predictable even when button text is hard to read on some notification UIs.
 - **Fully customizable text** — initial message, button titles, confirmation message, and failure message are all inputs.
 - **Configurable delays** — set the initial trigger time and an independent re-notification delay per snooze option.
-- **Optional auto-close** — point it at a `cover` entity and it will attempt to close it automatically and confirm the result, instead of just asking someone to close it by hand.
+- **Optional auto-fix, on any entity** — point the center button at a cover, lock, switch, light, fan, input boolean, script, scene, or button and it runs that entity, then confirms against the sensor. The right action is picked automatically from the entity type (covers close, locks lock, buttons press, scripts and scenes run, everything else turns off), with a manual override for setups where that's backwards — like a relay that closes a door by being turned *on*.
 - **Real urgent escalation** — an unanswered alert, whether nobody ever responded or a snooze simply ran out with the door still open, is what triggers escalation. Urgent (a distinct relabeling on your own recheck interval) is optional — leave it off and the alert still keeps nagging forever on a plain default interval instead.
 - **Custom display name** — override the sensor's Home Assistant name in notifications if it's too technical to read at a glance.
 - **Resolves the moment the sensor closes** — however it closes, by hand or automatically, the alert clears, everyone gets a closing confirmation, and the automation ends. It doesn't sit waiting out a snooze or a nag timer first.
@@ -27,14 +27,14 @@ It's a one-stop notification system: it presents the user with choices, nudges t
 1. The automation triggers once the monitored sensor has been `on` (open) for the configured **Initial Alert Time**.
 2. An actionable notification goes out with three buttons, always in this order regardless of label:
    - **Left — Ignore.** Stops the automation entirely for this occurrence. Broadcasts who ignored it to every device first.
-   - **Center — Close, or a fallback Snooze.** If a Closable Device is configured, this closes it automatically. If not, this is just a second Snooze with its own independent delay.
+   - **Center — run the Action Device, or a fallback Snooze.** If an Action Device is configured, this runs it. If not, this is just a second Snooze with its own independent delay. The label writes itself from the device and the action — "Close Garage Door", "Turn Off Porch Light" — unless you override it.
    - **Right — Snooze.** The original snooze option, with its own delay.
    - Both snooze buttons automatically show their delay on the label itself, e.g. "Snooze (30)" — no need to type the number.
 3. Depending on which button is pressed (or if nobody responds):
    - **Snooze (either button)** — every device gets told who snoozed it and for how long, the alert is dismissed, and nothing happens for that chosen delay. A snooze is a one-time quiet period, not its own repeating cycle — once it ends, the sensor is checked once.
    - **After that check (or after the very first alert gets no response at all)** — if the sensor's closed, the automation is done. If it's still open, the alert re-sends and escalates: **marked Urgent** on your configured Urgent Recheck Delay if you set one, or just re-sent normally on the Standard Nag Delay if you left Urgent at 0 — either way, it keeps repeating on that interval until the sensor closes. Nagging never silently stops; only the Urgent relabeling is optional.
-   - **Close, with no closable device configured** — behaves exactly like a snooze (see above), using its own fallback delay.
-   - **Close, with a closable device configured** — calls `cover.close_cover`, waits a minute, then checks the sensor. If it's actually closed, sends the confirmation message (naming who requested it); if not, it retries every 5 minutes with the failure message until the sensor agrees it's shut. The confirmation is never sent optimistically — only once the sensor itself confirms it.
+   - **Center button, with no Action Device configured** — behaves exactly like a snooze (see above), using its own fallback delay.
+   - **Center button, with an Action Device configured** — calls the resolved service on it, waits a minute, then checks the sensor. If it's actually closed, sends the confirmation message (naming who requested it); if not, it retries every 5 minutes with the failure message until the sensor agrees it's shut. The confirmation is never sent optimistically — only once the sensor itself confirms it.
    - **Ignore** — the loop stops. If the sensor later closes and reopens, a fresh cycle starts from scratch.
 4. **At any point, if the sensor closes, the alert is over.** The blueprint watches the sensor the whole time, not just between nags, so a door closed by hand ends the cycle right then: the open alert is dismissed on every device and a closing confirmation goes out. That applies during the first wait, during a snooze, and during the auto-close retry loop.
 5. **A button press is only acted on if the sensor is still open.** The state is re-checked at the moment of the tap. If someone taps Close a few seconds after the door was already shut, that press is discarded rather than sent to the device — so a toggle-style closer can't be flipped back open — and a late Snooze can't silence an alert that's already resolved.
@@ -43,14 +43,26 @@ It's a one-stop notification system: it presents the user with choices, nudges t
 
 If the sensor flaps (closes and reopens) mid-alert, the automation restarts cleanly for the new open event instead of running two nag loops at once.
 
-**Choosing "Closable Device" vs. leaving it blank:** fill it in only when there's an actual device that can close the sensor for you — a smart garage door opener, a smart lock's cover/switch entity. Leave it blank for anything a person has to physically check — an interior door, a safe, a vault, a hinged door with no auto-closer; the center button becomes a second Snooze instead. There's no "open the app" launcher built in yet (see Known Issues below for the idea being considered).
+**Choosing an "Action Device" vs. leaving it blank:** fill it in when *something in Home Assistant* can resolve the situation — a garage opener, a smart lock, a relay wired to a door closer, a plug, or a script that does several things at once. Leave it blank for anything a person has to physically handle: an interior door, a safe, a vault, a hinged door with no auto-closer. Blank turns the center button into a second Snooze, since there'd be nothing for it to run.
+
+**What "Automatic" picks:**
+
+| Entity type | Action taken | Button reads |
+|---|---|---|
+| `cover` | `cover.close_cover` | Close *(name)* |
+| `lock` | `lock.lock` | Lock *(name)* |
+| `button` | `button.press` | Press *(name)* |
+| `script`, `scene` | turn on (runs it) | Turn On *(name)* |
+| `switch`, `light`, `fan`, `input_boolean` | turn off | Turn Off *(name)* |
+
+Override it with **Action to Perform** when that's backwards for your hardware. The common case is a momentary relay or smart plug that *closes* a door by being switched **on** — pick "Turn on / run" there.
 
 ## Requirements
 
 - A recent Home Assistant instance.
 - The [Home Assistant Companion App](https://companion.home-assistant.io/) installed and set up for actionable notifications on every device you want to notify.
 - The sensor you want to monitor exposed as a `binary_sensor`.
-- (Optional) A `cover` entity if you want the blueprint to attempt an automatic close.
+- (Optional) An entity that can resolve the alert if you want the blueprint to act on its own — a cover, lock, switch, light, fan, input boolean, script, scene, or button.
 
 ## Installation
 
@@ -69,18 +81,19 @@ If the sensor flaps (closes and reopens) mid-alert, the automation restarts clea
 | Friendly Name | Optional — falls back to the sensor's HA name | Overrides the name shown in notifications. | "Master Bedroom Door" |
 | Initial Alert Time (minutes) | Required | How long the sensor must be `on` before the first alert. | `15` for a garage door, `5` for a mailbox |
 | Notification Devices | Required | Mobile app devices to notify. | — |
-| Closable Device | Optional — leave blank if nothing can auto-close it | A `cover` entity the blueprint can command closed. Leave blank for doors a person has to check (interior doors, safes, vaults) — the center button becomes a second Snooze instead. | `cover.garage_door` |
+| Action Device | Optional — leave blank if nothing can resolve it automatically | Any cover, lock, switch, light, fan, input boolean, script, scene, or button the blueprint can run to fix the situation. Leave blank for doors a person has to check (interior doors, safes, vaults) — the center button becomes a second Snooze instead. | `cover.garage_door`, `switch.door_closer_relay`, `script.secure_the_house` |
+| Action to Perform | Optional — defaults to Automatic | What to do to the Action Device. Automatic picks by entity type (see the table above). Override for hardware where that's backwards. | Automatic, or "Turn on / run" for a relay that closes by switching on |
 | Initial Notification Message | Optional — defaults to a generic message | The primary alert message. | "The garage door has been open for too long." |
 | Snooze Button Title (Right) | Optional — defaults to "Snooze" | Base text for the right-hand button. Its delay is appended automatically ("Snooze (30)"). | "Snooze" |
 | Snooze Delay - Right Button (minutes) | Required | How long this snooze lasts before re-checking. | `30` |
-| Center Button Title (Closable Device Set) | Optional — auto-generates "Close \<device name\>" if left blank | Only fill in for different wording. | "Shut Garage" |
+| Center Button Title (Action Device Set) | Optional — auto-generates from the device and action, e.g. "Close Garage Door" | Only fill in for different wording. | "Shut Garage" |
 | Center Button Title (Fallback Snooze, No Device) | Optional — defaults to "Snooze" | Text for the center button when it's acting as a fallback snooze. | "Snooze" |
 | Snooze Delay - Center Button Fallback (minutes) | Required | How long the fallback snooze lasts, independent of the right button's delay. | `90` |
 | Urgent Recheck Delay (minutes) | Optional — 0 turns Urgent off | Whenever an alert gets zero response, how long before it re-sends marked Urgent, and how often it repeats after that until resolved. Leave at `0` to keep nagging on the Standard Nag Delay instead, without the Urgent relabeling. | `10` |
 | Standard Nag Delay (minutes) | Optional — defaults to `15` | Used instead of Urgent Recheck Delay whenever that's left at 0, and for the very first alert's own wait. | `15` |
 | Urgent Prefix Text | Optional — defaults to "Urgent" | Title used on a re-sent alert that got no response at all, when Urgent Recheck Delay is set above 0. | "Urgent - still open!" |
-| Confirmation Message | Optional — has a generated default | Sent on any confirmed close, whether a person closed it by hand or the Closable Device closed it. Never sent until the sensor itself reports closed. Use `{person}` for whoever pressed Close — it renders as "someone" on a manual close, since nobody pressed anything. | "The garage door closed automatically, requested by {person}." |
-| Closing Failure Message | Optional — has a generated default | Sent every 5 minutes while the sensor still shows open after a close command. Use `{person}` for whoever pressed Close. | "The garage door is still open — please check it." |
+| Confirmation Message | Optional — has a generated default | Sent on any confirmed close, whether a person closed it by hand or the Action Device resolved it. Never sent until the sensor itself reports closed. Use `{person}` for whoever pressed the button — it renders as "someone" on a manual close, since nobody pressed anything. | "The garage door closed automatically, requested by {person}." |
+| Action Failure Message | Optional — has a generated default | Sent every 5 minutes while the sensor still shows open after the Action Device was run. Use `{person}` for whoever pressed the button. | "The garage door is still open — please check it." |
 
 ## Changelog
 
@@ -95,6 +108,10 @@ See [CHANGELOG.md](CHANGELOG.md) for what's changed release to release.
 
 - **Who tapped a button can still fall back to "Someone" in rare cases.** Status broadcasts first resolve the responder to the Home Assistant **person** whose user account tapped the button, which is the reliable path. If that lookup comes up empty — no `person` entity is linked to that user account, or the event carries no user context — the blueprint falls back to reading `device_id` off the `mobile_app_notification_action` event. Home Assistant has a [known bug](https://github.com/home-assistant/core/issues/88742) where that field is sometimes the phone's own OS-level ID rather than its device registry ID, in which case the name lands on "Someone". Linking each Home Assistant user to a person entity (Settings → People) avoids this entirely.
 
-## Planned: "Open App" button
+## On third-party apps (MyQ, August, Yale, etc.)
 
-For doors controlled by a third-party app the blueprint can't operate directly (MyQ, August, Yale, etc.), the plan is a free-text field where you paste that app's URL scheme (from the app's own docs, e.g. `myq://`), rather than a hardcoded dropdown of app names — a dropdown would need constant upkeep and would still miss whatever app someone actually has. The Companion App's notification actions already support opening an arbitrary link via a `uri:` field, so this is a matter of wiring that up. Not implemented yet.
+An earlier plan here was an "Open App" button — paste a URL scheme like `myq://` and have the notification launch that app. The Action Device field replaces it, and does better.
+
+If a device is integrated into Home Assistant at all, it has an entity, and the center button can drive that entity directly — one tap, done, with confirmation from the sensor afterward. Launching an app instead means opening it, finding the control, tapping it, and then having no idea whether it worked. If a device *isn't* integrated into Home Assistant, a deep link only opens the app to its home screen; it can't press the button for you either.
+
+Anything not directly supported can still be reached by pointing Action Device at a `script`, which can call whatever service or webhook the device needs.
